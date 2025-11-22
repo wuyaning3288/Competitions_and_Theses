@@ -1,4 +1,3 @@
-````markdown
 # Analysis of NNConv + PerforatedAI (PAI) on QM Dataset
 
 ## Table of Contents
@@ -6,7 +5,6 @@
 - [1. Experiment Setup](#1-experiment-setup)
   - [1.1 Dataset and Task](#11-dataset-and-task)
   - [1.2 Model Architecture](#12-model-architecture)
-  - [1.3 Training Configuration](#13-training-configuration)
 - [2. Baseline vs PAI Summary](#2-baseline-vs-pai-summary)
 - [3. Training Dynamics (seed = 60)](#3-training-dynamics-seed--60)
   - [3.1 Validation Curves and PAI Switch Points](#31-validation-curves-and-pai-switch-points)
@@ -16,7 +14,6 @@
   - [4.1 Parameter Counts per Cycle](#41-parameter-counts-per-cycle)
   - [4.2 Cycle-Level Performance](#42-cyclelevel-performance)
 - [5. Discussion and Limitations](#5-discussion-and-limitations)
-- [6. How to Reproduce](#6-how-to-reproduce)
 
 ---
 
@@ -71,39 +68,6 @@ scheduler     = ReduceLROnPlateau(mode='min', factor=0.5,
 early_stop    = 20 epochs without validation improvement
 ````
 
-### 1.3 Training Configuration
-
-Reproducibility:
-
-* Global seeds set for `python`, `numpy`, and `torch` (CPU + CUDA).
-* Dataset split uses `torch.Generator().manual_seed(CFG.seed)`.
-* Each `DataLoader` uses a seeded generator and a `worker_init_fn` to make workers deterministic.
-* CUDA deterministic algorithms are enabled where supported.
-
-PAI-specific configuration:
-
-* `initialize_pai(doing_pai=True, save_name='PAI', making_graphs=False)`
-* Switch mode: `DOING_HISTORY`
-* Scheduled parameters (where available in the open-source build):
-
-  * `n_epochs_to_switch = 10`
-  * `p_epochs_to_switch = 10`
-  * `history_lookback = 1`
-  * Intended improvement threshold ≈ 0.003 for triggering structure changes.
-
-All PAI artifacts for this run are saved under:
-
-```text
-outputs/PAI_seed60/
-  ├── Scores.csv
-  ├── Times.csv
-  ├── LearningRate.csv
-  ├── paramCounts.csv
-  ├── switchEpochs.csv
-  ├── best_test_scores.csv
-  └── pai_plots.png
-```
-
 ---
 
 ## 2. Baseline vs PAI Summary
@@ -121,6 +85,16 @@ Observations:
 * PAI improves **test MAE** by about `0.0119` (also ≈ **1.8 % relative**).
 * On this seed, PAI provides a consistent, small but clear gain in both validation and held-out test performance over the vanilla NNConv baseline.
 
+PAI-specific configuration:
+
+* `initialize_pai(doing_pai=True, save_name='PAI', making_graphs=False)`
+* Switch mode: `DOING_HISTORY`
+* Scheduled parameters (where available in the open-source build):
+
+  * `n_epochs_to_switch = 10`
+  * `p_epochs_to_switch = 10`
+  * `history_lookback = 1`
+  * Intended improvement threshold ≈ 0.003 for triggering structure changes.
 ---
 
 ## 3. Training Dynamics (seed = 60)
@@ -134,7 +108,7 @@ If you save them from the notebook, suggested filenames are:
 
 ### 3.1 Validation Curves and PAI Switch Points
 
-![Validation curves and PAI switch points](plots/validation_curves_seed60.png)
+![Validation curves and PAI switch points](plots/validation_curves.png)
 
 Data sources:
 
@@ -143,68 +117,28 @@ Data sources:
 
 Key patterns:
 
-* The **PAI validation MAE** drops quickly from ≈ 0.76 at the first epoch to ≈ 0.64 by ~epoch 20, then continues to improve more slowly toward ≈ 0.58.
-* The **running-best curve** is smooth and monotonically decreasing; by the end of training it stabilizes around **0.575–0.576**.
-* **Vertical dashed lines** mark PAI “switch back to neuron” epochs. In this run there are two visible switches, around **epoch 73** and **epoch 88**:
-
-  * The first switch roughly coincides with a long plateau of the validation curve.
-  * After the first switch, validation MAE briefly worsens, then recovers and slightly improves again.
-* The global best validation MAE reported by the training loop is **0.574468**, occurring near the end of training after the last switch.
+In this run, the PAI validation MAE drops quickly from about 0.76 at the first epoch to roughly 0.64 by around epoch 20, and then continues to improve more slowly toward 0.58. The corresponding running-best curve is smooth and strictly decreasing, eventually stabilizing near 0.575–0.576 as training progresses. Vertical dashed lines in the plot indicate epochs where PAI switches back to the neuron mode; here we observe two such switches, around epoch 73 and epoch 88. The first switch happens roughly at the end of a long plateau in the validation curve, and immediately after this switch the validation MAE briefly gets worse before recovering and improving slightly beyond the previous level. Overall, the global best validation MAE reported by the training loop is 0.574468, which occurs near the end of training after the final switch.
 
 Interpretation:
 
 * PAI is conservative: it allows the base architecture to learn for tens of epochs before attempting structural changes.
-* Switches are aligned with **slow-improvement regions** of the validation curve, which is exactly where architecture search is most useful.
-* After switching, the model does not collapse; it stays in roughly the same MAE range and eventually finds a slightly better optimum.
-
 ### 3.2 Learning Rate Schedule
 
-![Learning rate schedule](plots/lr_schedule_seed60.png)
+![Learning rate schedule](plots/lr_schedule.png)
 
 Data source:
 
 * `LearningRate.csv` (`epoch`, `learning_rate`)
 
-Behavior:
+In this section we look at how the learning rate evolves over epochs using `LearningRate.csv`. From epochs 1–42 the LR stays at 5e-4; around epoch 43 `ReduceLROnPlateau` triggers the first decay to 2.5e-4 when validation performance plateaus. A second decay in the early 70s brings the LR down to 1.25e-4, again after a period of slow improvement.
 
-* Epochs **1–42**: learning rate fixed at **5e-4**.
-* Around **epoch 43**, `ReduceLROnPlateau` triggers the first decay to **2.5e-4**, matching the early plateau in validation performance.
-* A second decay further reduces LR to **1.25e-4`** in the early 70s, again following a period of limited improvement.
-* After the **first PAI switch** (≈ epoch 73), the optimizer and scheduler are re-created:
-
-  * LR is **reset to 5e-4**, giving the restructured network a chance to explore with a larger step size.
-  * Later in this new cycle, LR decays again to **2.5e-4** once the post-switch validation curve plateaus.
-
-Takeaways:
-
-* Learning-rate decays line up well with plateaus in the validation MAE.
-* When PAI restructures the model, the LR reset ensures the new architecture is not stuck in a tiny-step regime inherited from the old one.
-* The combination of **LR schedule + PAI switches** effectively creates multiple “training phases” within a single run.
+After the first PAI switch (≈ epoch 73), the optimizer and scheduler are re-created, so the LR is reset to 5e-4 for the restructured model and later decays again to 2.5e-4 as the new validation curve flattens. Overall, LR drops align well with validation plateaus, and the combination of LR resets plus PAI switches effectively creates several distinct “training phases” within a single run.
 
 ### 3.3 Epoch Time and Runtime Overhead
 
-![Epoch time](plots/epoch_time_seed60.png)
+Using `Times.csv` (`epoch`, `time_sec`), the per-epoch runtime fluctuates between roughly 6.8 s and 9.0 s, which is expected noise from data loading and GPU scheduling. On average, each epoch takes 7.776 s; before the first PAI switch (epoch < 73) the mean is 7.713 s, and after the switch it increases slightly to 8.079 s.
 
-Data source:
-
-* `Times.csv` (`epoch`, `time_sec`)
-
-Summary statistics (from the notebook):
-
-* **Average epoch time (overall):** `7.776 s`
-* **Average before first switch (epoch < 73):** `7.713 s`
-* **Average after first switch (epoch ≥ 73):** `8.079 s`
-
-Observations:
-
-* Per-epoch times fluctuate between roughly **6.8 s** and **9.0 s**, likely due to noise from data loading and GPU scheduling.
-* After the first PAI switch, the average epoch time increases by about **0.37 s** (~**4–5 % overhead**).
-* There is **no catastrophic slowdown**; the cost of using PAI is modest compared to overall training time.
-
-Interpretation:
-
-* For this setup, PAI’s structural updates add a small but acceptable runtime overhead.
-* Given a ≈1.8 % improvement in MAE and only ≈5 % increase in per-epoch time after switching, the trade-off is reasonable.
+This implies that PAI’s structural updates introduce only a small runtime overhead: about 0.37 s per epoch, or roughly 4–5 % more than the pre-switch phase, with no catastrophic slowdown. Given that we gain around 1.8 % improvement in MAE for this run, the extra cost per epoch is modest and the accuracy–time trade-off is reasonable.
 
 ---
 
@@ -255,40 +189,20 @@ Additional summary (from the notebook):
 
 Interpretation:
 
-* At the **cycle level**, the second cycle finds a marginally better validation optimum than the first (difference ≈ 4e-5).
-* However, the **test MAE at cycle 1’s validation best** is **worse** than cycle 0’s test MAE (0.644 vs 0.631).
-* The **global best test MAE (0.632334)** reported at the end of training occurs at a later epoch inside the final cycle, not exactly at the cycle-level validation minimum stored in `best_test_scores.csv`.
-
-This mismatch between `best_val` and `test_at_best` across cycles is a good reminder that:
-
-* PAI (and our early-stopping criterion) focuses on **validation error**, not test error.
-* Slight overfitting to the validation set is possible when doing architecture search on a single split.
+At the performance level, cycle 1 finds a marginally better validation optimum than cycle 0 (difference ≈ 4e-5), but its test MAE at that validation best is worse (0.644 vs 0.631). The global best test MAE (0.632334) reported by the training loop actually occurs at a later epoch inside the final cycle, not exactly at the cycle-level validation minimum stored in best_test_scores.csv. This mismatch between best_val and test_at_best highlights that PAI and our early-stopping logic are tuned to validation error, not test error, so mild overfitting to the validation set is possible. In practice, the final best test MAE is achieved in the last neuron phase, using a network whose architecture has already been modified by PAI (as indicated by the larger parameter count in cycle 1), so PAI effectively acts as an architecture-search phase whose resulting model is then trained and evaluated in standard neuron mode.
 
 ---
 
 ## 5. Discussion and Limitations
 
-**Effectiveness of PAI**
-
-* On this **seed=60** run, PAI improves both validation and test MAE by about **1.8 %** over a strong NNConv baseline.
-* The improvement is modest but consistent and obtained **without changing the base architecture or loss function**.
-* PAI’s structural changes are small (≈1 % more parameters) but enough to slightly push the model to a better optimum.
-
-**Cost of PAI**
-
-* The per-epoch runtime after the first switch is only **≈5 % slower**, and there are only a couple of switches.
-* For this experiment, PAI behaves like a **lightweight architecture search** mechanism, rather than an expensive meta-learning loop.
-
-**Generalization vs validation**
-
-* Cycle-level results show that the cycle with the best validation MAE does **not** have the best test MAE.
-* This highlights a potential risk of **overfitting to validation** when the same split is used for both hyperparameter tuning and architecture selection.
+On this seed=60 run, PAI improves both validation and test MAE by about **1.8 %** over a strong NNConv baseline.The improvement is modest but consistent and obtained without changing the base architecture or loss function.PAI’s structural changes are small (≈1 % more parameters) but enough to slightly push the model to a better optimum.
+The per-epoch runtime after the first switch is only ≈5 % slower, and there are only a couple of switches.For this experiment, PAI behaves like a lightweight architecture search mechanism, rather than an expensive meta-learning loop.
+Cycle-level results show that the cycle with the best validation MAE does not have the best test MAE.This highlights a potential risk of overfitting to validation when the same split is used for both hyperparameter tuning and architecture selection.
 
 **Limitations**
 
-* All conclusions are based on a **single random seed** and a **single dataset**.
-* We did not run a systematic **multi-seed study** (e.g., 5 seeds) to estimate variance in PAI’s gains.
-* Hyperparameters for PAI (switch thresholds, history length) were chosen heuristically and not tuned.
+* All conclusions are based on a single random seed and a single dataset.
+* We did not run a systematic multi-seed study (e.g., 5 seeds) to estimate variance in PAI’s gains.
 * Alternative backbones (GIN, GAT, deeper NNConv, etc.) were not explored.
 
 **Future work**
@@ -299,58 +213,4 @@ This mismatch between `best_val` and `test_at_best` across cycles is a good remi
 * Evaluate PAI on additional graph benchmarks to test robustness.
 
 ---
-
-## 6. How to Reproduce
-
-To reproduce this analysis:
-
-1. **Train Baseline + PAI**
-
-   ```bash
-   # main script name depends on your repo; e.g.:
-   python train_pai_qm.py
-   ```
-
-   Make sure `CFG.seed = 60` and `CFG.save_name = 'PAI'`.
-
-2. **Inspect outputs**
-
-   After training, check:
-
-   ```text
-   outputs/PAI_seed60/
-     Scores.csv
-     Times.csv
-     LearningRate.csv
-     paramCounts.csv
-     switchEpochs.csv
-     best_test_scores.csv
-     pai_plots.png
-   ```
-
-3. **Run the analysis notebook**
-
-   Open `analysis_seed60.ipynb` (or similar) and run the cells that:
-
-   * Load the CSVs from `outputs/PAI_seed60/`.
-   * Generate the plots shown in this document.
-   * Print the summary statistics (best MAEs, average epoch times, cycle table).
-
-4. **Regenerate this report**
-
-   The figures referenced here can be saved under `plots/`:
-
-   ```text
-   plots/
-     validation_curves_seed60.png
-     lr_schedule_seed60.png
-     epoch_time_seed60.png
-     cycle_param_counts_seed60.png
-     cycle_best_scores_seed60.png
-   ```
-
-   Commit both the CSVs and the plots to GitHub, together with this `analysis.md`, to provide a complete, reproducible record of the experiment.
-
-```
-::contentReference[oaicite:0]{index=0}
 ```
