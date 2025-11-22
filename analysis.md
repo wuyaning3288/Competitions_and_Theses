@@ -198,11 +198,12 @@ At the performance level, cycle 1 finds a marginally better validation optimum t
 On this seed=60 run, PAI improves both validation and test MAE by about **1.8 %** over a strong NNConv baseline.The improvement is modest but consistent and obtained without changing the base architecture or loss function.PAI’s structural changes are small (≈1 % more parameters) but enough to slightly push the model to a better optimum.
 The per-epoch runtime after the first switch is only ≈5 % slower, and there are only a couple of switches.For this experiment, PAI behaves like a lightweight architecture search mechanism, rather than an expensive meta-learning loop.
 Cycle-level results show that the cycle with the best validation MAE does not have the best test MAE.This highlights a potential risk of overfitting to validation when the same split is used for both hyperparameter tuning and architecture selection.
+I also ran the same model with a different random seed and a smaller 1k validation split, and in that setting PAI exhibited much stronger overfitting (validation MAE kept improving while test MAE degraded), reinforcing that PAI has a noticeable tendency to overfit the validation set when it is small.
 
 **Limitations**
 
 * All conclusions are based on a single random seed and a single dataset.
-* We did not run a systematic multi-seed study (e.g., 5 seeds) to estimate variance in PAI’s gains.
+* Did not run a systematic multi-seed study (e.g., 5 seeds) to estimate variance in PAI’s gains.
 * Alternative backbones (GIN, GAT, deeper NNConv, etc.) were not explored.
 
 **Future work**
