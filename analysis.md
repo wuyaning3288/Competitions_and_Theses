@@ -20,6 +20,12 @@
 ## 1. Experiment Setup
 
 ### 1.1 Dataset and Task
+This project is based on the HW4: Graph Neural Networks assignment from 38-616/09-616 (Spring 2025)https://www.kaggle.com/competitions/s25-09616-hw4. The data come from the associated Kaggle competition, where the goal is to perform regression on molecular graphs: given a molecule, predict a single scalar target property.
+Each molecule is represented as a graph and stored in PyTorch Geometric format:
+
+Nodes correspond to atoms, with a fixed-dimensional feature vector per atom.
+
+Edges correspond to bonds, with a feature vector per bond.
 
 The experiment evaluates a graph neural network (GNN) based on `NNConv` and `Set2Set` on a QM-style molecular property prediction task.
 
