@@ -100,9 +100,11 @@ PAI-specific configuration:
   * `n_epochs_to_switch = 10`
   * `p_epochs_to_switch = 10`
   * `history_lookback = 1`
-  * Intended improvement threshold ≈ 0.003 for triggering structure changes.
+  * Intended improvement threshold ≈ 0.003 for triggering structure changes
+  *
+ * Reproduction note: using the returned `.py` script (seed = 60), I was able to reproduce a similar improvement, achieving **Test MAE -> Baseline: 0.621168 | PAI: 0.6011382.
 
-Reproduction note: using the returned `.py` script (seed = 60), I was able to reproduce a similar improvement, achieving **Test MAE -> Baseline: 0.621168 | PAI: 0.6011382.
+
 ---
 
 ## 3. Training Dynamics (seed = 60)
